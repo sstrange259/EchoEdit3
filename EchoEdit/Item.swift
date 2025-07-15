@@ -1,8 +1,8 @@
 //
 //  Item.swift
-//  EchoEdit
+//  TextTune
 //
-//  Created by Steven Strange on 6/25/25.
+//  Created by Steven Strange on 6/13/25.
 //
 
 import Foundation
