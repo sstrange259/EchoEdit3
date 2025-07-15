@@ -407,7 +407,7 @@ private func getCurrentTransactionData() async -> String? {
             print("🔍 SecureFlux: Processing entitlement #\(entitlementCount)")
             
             do {
-                let transaction = try checkVerified(result)
+                let transaction = try await checkVerified(result)
                 print("🔍 SecureFlux: Transaction - ID: \(transaction.productID), Type: \(transaction.productType)")
                 
                 let transactionData: [String: Any] = [
@@ -450,7 +450,7 @@ private func getCurrentTransactionData() async -> String? {
     }
 }
 
-private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+private func checkVerified<T>(_ result: VerificationResult<T>) async throws -> T {
     switch result {
     case .unverified:
         throw SecureFluxError.unauthorized

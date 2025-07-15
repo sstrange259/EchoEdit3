@@ -43,7 +43,7 @@ class StoreKitService: ObservableObject {
         return Task.detached { [weak self] in
             for await result in Transaction.updates {
                 do {
-                    let transaction = try self?.checkVerified(result)
+                    let transaction = try await self?.checkVerified(result)
                     guard let transaction = transaction else { continue }
                     
                     // Update on main actor
@@ -118,7 +118,7 @@ class StoreKitService: ObservableObject {
             switch result {
             case .success(let verification):
                 print("✅ StoreKit: Purchase successful")
-                let transaction = try checkVerified(verification)
+                let transaction = try await checkVerified(verification)
                 await updateSubscriptionStatus()
                 
                 // Award credits for subscription (100 credits per month)
@@ -163,7 +163,7 @@ class StoreKitService: ObservableObject {
             
             switch result {
             case .success(let verification):
-                let transaction = try checkVerified(verification)
+                let transaction = try await checkVerified(verification)
                 
                 // Award credits for one-time purchase (25 credits)
                 if transaction.productID == creditsProductID {
@@ -290,7 +290,7 @@ class StoreKitService: ObservableObject {
         }
     }
     
-    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+    private func checkVerified<T>(_ result: VerificationResult<T>) async throws -> T {
         switch result {
         case .unverified:
             throw StoreError.failedVerification
