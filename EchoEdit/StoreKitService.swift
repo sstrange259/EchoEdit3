@@ -273,6 +273,7 @@ class StoreKitService: ObservableObject {
         request.addValue(keyID, forHTTPHeaderField: "X-Key-ID")
         request.addValue(assertion.base64EncodedString(), forHTTPHeaderField: "X-Assertion")
         request.addValue(clientDataHash.base64EncodedString(), forHTTPHeaderField: "X-Client-Data-Hash")
+        request.addValue(AppConfig.appToken, forHTTPHeaderField: "X-App-Token")
     }
     
     private func getAppStoreReceiptData() async -> String? {
