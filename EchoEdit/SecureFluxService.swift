@@ -94,32 +94,43 @@ class SecureFluxProService: SecureFluxService {
             aspectRatio: aspectRatio
         )
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Add current transaction data for subscription verification
-        if let transactionData = await getCurrentTransactionData() {
-            print("📄 SecureFlux: Adding transaction data to request")
-            request.addValue(transactionData, forHTTPHeaderField: "X-Transaction-Data")
-        } else {
-            print("⚠️ SecureFlux: No valid transaction data available - this may cause authentication issues")
+        func makeRequest() async throws -> SecureFluxResponse {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            // Add current transaction data for subscription verification
+            if let transactionData = await getCurrentTransactionData() {
+                print("📄 SecureFlux: Adding transaction data to request")
+                request.addValue(transactionData, forHTTPHeaderField: "X-Transaction-Data")
+            } else {
+                print("⚠️ SecureFlux: No valid transaction data available - this may cause authentication issues")
+            }
+
+            // Add App Attest headers
+            try await addAppAttestHeaders(to: &request, requestBody: requestBody)
+
+            do {
+                request.httpBody = try JSONEncoder().encode(requestBody)
+            } catch {
+                throw SecureFluxError.encodingError
+            }
+
+            return try await NetworkHelper.makeRequestWithRetry(
+                session: session,
+                request: request,
+                responseType: SecureFluxResponse.self
+            )
         }
-        
-        // Add App Attest headers
-        try await addAppAttestHeaders(to: &request, requestBody: requestBody)
-        
+
         do {
-            request.httpBody = try JSONEncoder().encode(requestBody)
-        } catch {
-            throw SecureFluxError.encodingError
+            return try await makeRequest()
+        } catch SecureFluxError.unauthorized {
+            print("🔄 SecureFlux: Unauthorized. Re-attesting and retrying request")
+            appAttestService.reset()
+            try await appAttestService.performInitialAttestation()
+            return try await makeRequest()
         }
-        
-        return try await NetworkHelper.makeRequestWithRetry(
-            session: session,
-            request: request,
-            responseType: SecureFluxResponse.self
-        )
     }
     
     func pollForResult(pollingURL: String) async throws -> UIImage {
@@ -129,17 +140,18 @@ class SecureFluxProService: SecureFluxService {
             throw SecureFluxError.invalidURL
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        // Add App Attest headers for polling
-        try await addAppAttestHeaders(to: &request, requestBody: nil)
-        
-        var attemptCount = 0
-        
-        while attemptCount < maxPollingAttempts {
-            do {
-                let (data, response) = try await session.data(for: request)
+        func performPoll() async throws -> UIImage {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+
+            // Add App Attest headers for polling
+            try await addAppAttestHeaders(to: &request, requestBody: nil)
+
+            var attemptCount = 0
+
+            while attemptCount < maxPollingAttempts {
+                do {
+                    let (data, response) = try await session.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw SecureFluxError.invalidResponse
@@ -181,8 +193,18 @@ class SecureFluxProService: SecureFluxService {
                 throw SecureFluxError.networkError(error)
             }
         }
-        
+
         throw SecureFluxError.pollingTimeout
+        }
+
+        do {
+            return try await performPoll()
+        } catch SecureFluxError.unauthorized {
+            print("🔄 SecureFlux: Unauthorized during poll. Re-attesting and retrying")
+            appAttestService.reset()
+            try await appAttestService.performInitialAttestation()
+            return try await performPoll()
+        }
     }
     
     private func downloadImage(from urlString: String) async throws -> UIImage {
@@ -262,32 +284,43 @@ class SecureFluxMaxService: SecureFluxService {
             aspectRatio: aspectRatio
         )
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Add current transaction data for subscription verification
-        if let transactionData = await getCurrentTransactionData() {
-            print("📄 SecureFlux: Adding transaction data to request")
-            request.addValue(transactionData, forHTTPHeaderField: "X-Transaction-Data")
-        } else {
-            print("⚠️ SecureFlux: No valid transaction data available - this may cause authentication issues")
+        func makeRequest() async throws -> SecureFluxResponse {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            // Add current transaction data for subscription verification
+            if let transactionData = await getCurrentTransactionData() {
+                print("📄 SecureFlux: Adding transaction data to request")
+                request.addValue(transactionData, forHTTPHeaderField: "X-Transaction-Data")
+            } else {
+                print("⚠️ SecureFlux: No valid transaction data available - this may cause authentication issues")
+            }
+
+            // Add App Attest headers
+            try await addAppAttestHeaders(to: &request, requestBody: requestBody)
+
+            do {
+                request.httpBody = try JSONEncoder().encode(requestBody)
+            } catch {
+                throw SecureFluxError.encodingError
+            }
+
+            return try await NetworkHelper.makeRequestWithRetry(
+                session: session,
+                request: request,
+                responseType: SecureFluxResponse.self
+            )
         }
-        
-        // Add App Attest headers
-        try await addAppAttestHeaders(to: &request, requestBody: requestBody)
-        
+
         do {
-            request.httpBody = try JSONEncoder().encode(requestBody)
-        } catch {
-            throw SecureFluxError.encodingError
+            return try await makeRequest()
+        } catch SecureFluxError.unauthorized {
+            print("🔄 SecureFlux: Unauthorized. Re-attesting and retrying request")
+            appAttestService.reset()
+            try await appAttestService.performInitialAttestation()
+            return try await makeRequest()
         }
-        
-        return try await NetworkHelper.makeRequestWithRetry(
-            session: session,
-            request: request,
-            responseType: SecureFluxResponse.self
-        )
     }
     
     func pollForResult(pollingURL: String) async throws -> UIImage {
@@ -297,17 +330,18 @@ class SecureFluxMaxService: SecureFluxService {
             throw SecureFluxError.invalidURL
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        // Add App Attest headers for polling
-        try await addAppAttestHeaders(to: &request, requestBody: nil)
-        
-        var attemptCount = 0
-        
-        while attemptCount < maxPollingAttempts {
-            do {
-                let (data, response) = try await session.data(for: request)
+        func performPoll() async throws -> UIImage {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+
+            // Add App Attest headers for polling
+            try await addAppAttestHeaders(to: &request, requestBody: nil)
+
+            var attemptCount = 0
+
+            while attemptCount < maxPollingAttempts {
+                do {
+                    let (data, response) = try await session.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw SecureFluxError.invalidResponse
@@ -349,8 +383,18 @@ class SecureFluxMaxService: SecureFluxService {
                 throw SecureFluxError.networkError(error)
             }
         }
-        
+
         throw SecureFluxError.pollingTimeout
+        }
+
+        do {
+            return try await performPoll()
+        } catch SecureFluxError.unauthorized {
+            print("🔄 SecureFlux: Unauthorized during poll. Re-attesting and retrying")
+            appAttestService.reset()
+            try await appAttestService.performInitialAttestation()
+            return try await performPoll()
+        }
     }
     
     private func downloadImage(from urlString: String) async throws -> UIImage {
