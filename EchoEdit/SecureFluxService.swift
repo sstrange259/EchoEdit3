@@ -2,7 +2,6 @@
 //  SecureFluxService.swift
 //  EchoEdit
 //
-//  Secure API service using Cloudflare Worker proxy
 //  Created by Steven Strange on 6/26/25.
 //
 
@@ -107,7 +106,6 @@ class SecureFluxProService: SecureFluxService {
                 print("⚠️ SecureFlux: No valid transaction data available - this may cause authentication issues")
             }
 
-            // Add App Attest headers
             try await addAppAttestHeaders(to: &request, requestBody: requestBody)
 
             do {
@@ -144,7 +142,6 @@ class SecureFluxProService: SecureFluxService {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
 
-            // Add App Attest headers for polling
             try await addAppAttestHeaders(to: &request, requestBody: nil)
 
             var attemptCount = 0
@@ -297,7 +294,6 @@ class SecureFluxMaxService: SecureFluxService {
                 print("⚠️ SecureFlux: No valid transaction data available - this may cause authentication issues")
             }
 
-            // Add App Attest headers
             try await addAppAttestHeaders(to: &request, requestBody: requestBody)
 
             do {
@@ -334,7 +330,6 @@ class SecureFluxMaxService: SecureFluxService {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
 
-            // Add App Attest headers for polling
             try await addAppAttestHeaders(to: &request, requestBody: nil)
 
             var attemptCount = 0

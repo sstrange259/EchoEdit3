@@ -36,8 +36,6 @@ class AppAttestService: ObservableObject {
         }
     }
     
-    // MARK: - App Attest Flow
-    
     func performInitialAttestation() async throws {
         guard DCAppAttestService.shared.isSupported else {
             throw AppAttestError.notSupported

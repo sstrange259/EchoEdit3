@@ -30,7 +30,6 @@ class StoreKitService: ObservableObject {
         Task {
             await requestProducts()
             await updateSubscriptionStatus()
-            // Skip backend update for now since App Attest is failing
             // await updateCreditsFromBackend()
         }
     }
@@ -247,7 +246,6 @@ class StoreKitService: ObservableObject {
             request.httpMethod = "GET"
             request.setValue(receiptData, forHTTPHeaderField: "X-Receipt-Data")
             
-            // Add App Attest headers for credits request
             try await addAppAttestHeaders(to: &request)
             
             let (data, response) = try await URLSession.shared.data(for: request)

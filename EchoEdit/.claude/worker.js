@@ -1,5 +1,4 @@
-// Cloudflare Worker for EchoEdit API Proxy
-// Keeps API keys secure and adds rate limiting
+// API proxy worker with basic rate limiting
 
 export default {
   async fetch(request, env, ctx) {
@@ -35,7 +34,6 @@ export default {
       let subscriptionActive = false;
       let deviceAuthenticated = false;
       
-      // First: Validate App Attest for device authentication
       if (keyID && assertion && clientDataHash) {
         try {
           const isValid = await validateAppAttest(keyID, assertion, clientDataHash, env);
@@ -301,7 +299,6 @@ async function handleGetCredits(userId, env, corsHeaders) {
   }
 }
 
-// ── App Attest ──────────────────────────────────────────────────────────────
 async function handleGetNonce(env, corsHeaders) {
   try {
     // Generate a cryptographically secure nonce
@@ -338,7 +335,6 @@ async function handleVerifyAttestation(request, env, corsHeaders) {
       return badRequest('Missing required fields', corsHeaders);
     }
     
-    // Verify attestation with Apple's App Attest service
     const verificationResult = await verifyAttestationWithApple(
       keyID, 
       attestation, 
@@ -711,7 +707,6 @@ function arrayEquals(a, b) {
   return true;
 }
 
-// ── Production Apple App Attest Verification ──────────────────────────────
 async function verifyAttestationWithApple(keyID, attestation, clientDataHash, bundleID) {
   try {
     // For production, implement full CBOR parsing and certificate verification
