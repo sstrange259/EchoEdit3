@@ -12,7 +12,7 @@ class StoreKitService: ObservableObject {
     private var subscriptionProduct: Product?
     private var creditsProduct: Product?
     private var updateListenerTask: Task<Void, Error>?
-    private let appAttestService: AppAttestService
+    private let appAttestService = AppAttestService()
     
     enum SubscriptionStatus {
         case unknown
@@ -24,8 +24,7 @@ class StoreKitService: ObservableObject {
     let subscriptionProductID = "echoedit.monthly.subscription"
     let creditsProductID = "echoedit.credits.25pack"
     
-    init(appAttestService: AppAttestService) {
-        self.appAttestService = appAttestService
+    init() {
         updateListenerTask = listenForTransactions()
         Task {
             await requestProducts()

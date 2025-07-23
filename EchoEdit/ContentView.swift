@@ -31,7 +31,6 @@ struct ContentView: View {
     @State private var showPlans = false
     @State private var errorMessage = ""
     @State private var useHighQuality = false
-    @StateObject private var appAttestService = AppAttestService()
     @StateObject private var storeKitService: StoreKitService
     
     // Blur effect transition states
@@ -51,28 +50,10 @@ struct ContentView: View {
     // We're removing crop/aspect ratio functionality
     
     // MARK: - Dependencies
-    @State private var secureProService: SecureFluxProService?
-    @State private var secureMaxService: SecureFluxMaxService?
     @State private var contentFilter = ContentFilter()
     
     init() {
-        let appAttest = AppAttestService()
-        _appAttestService = StateObject(wrappedValue: appAttest)
-        _storeKitService = StateObject(wrappedValue: StoreKitService(appAttestService: appAttest))
-    }
-    
-    private var activeSecureService: any SecureFluxService {
-        if useHighQuality {
-            if secureMaxService == nil {
-                secureMaxService = SecureFluxMaxService(workerURL: AppConfig.workerURL, appAttestService: appAttestService)
-            }
-            return secureMaxService!
-        } else {
-            if secureProService == nil {
-                secureProService = SecureFluxProService(workerURL: AppConfig.workerURL, appAttestService: appAttestService)
-            }
-            return secureProService!
-        }
+        _storeKitService = StateObject(wrappedValue: StoreKitService())
     }
 
     // MARK: - Constants
@@ -917,21 +898,7 @@ struct ContentView: View {
                     .zIndex(4)
             }
         }
-        .task {
-            // Initialize app attestation on first launch
-            if !appAttestService.isAttested {
-                do {
-                    try await appAttestService.performInitialAttestation()
-                } catch {
-                    print("Initial attestation failed: \(error)")
-                    errorMessage = "Device security setup failed. Please restart the app."
-                    showErrorPopup = true
-                }
-            }
-            
-            index = Int.random(in: 0..<DemoPrompts.prompts.count)
-            await cyclePrompts()
-        }
+        
         .onChange(of: storeKitService.errorMessage) { errorMessage in
             if let errorMessage = errorMessage, !errorMessage.isEmpty {
                 self.errorMessage = errorMessage
@@ -984,213 +951,16 @@ struct ContentView: View {
     }
 
     // MARK: - Actions
+
     func generateImage() {
-        guard !text.isEmpty || displayedImage != nil else { return }
-        
-        // Check if user has subscription OR sufficient credits
-        let requiredCredits = useHighQuality ? 5 : 2
-        let hasSubscription = storeKitService.subscriptionStatus == .subscribed
-        let hasCredits = storeKitService.credits >= requiredCredits
-        
-        if !hasSubscription && !hasCredits {
-            if storeKitService.credits == 0 {
-                errorMessage = "You need a subscription or credits to generate images. Please subscribe or purchase credits."
-            } else {
-                errorMessage = "Insufficient credits. You need \(requiredCredits) credits for this generation."
-            }
-            showErrorPopup = true
-            showPlans = true
-            return
-        }
-        
-        // Check for banned words before sending to API
-        if !text.isEmpty && contentFilter.containsBannedWords(text) {
-            errorMessage = "Your prompt contains content that violates our content policy. Please modify your prompt and try again."
-            showErrorPopup = true
-            return
-        }
-        
-        isLoading = true
-        
-        // Initialize transition - start with no blur but make it visible
-        transitionActive = true
-        blurRadius = 0
-        
-        // No distortion animation anymore
-        
-        // Make a copy of the current displayed image for the transition
-        if let currentImage = displayedImage {
-            generatedImage = currentImage
-            
-            // Animate blur increasing
-            withAnimation(.easeIn(duration: 0.5)) {
-                blurRadius = 20.0
-                transitionOpacity = 1.0
-            }
-        }
-        
-        // Convert displayed image (current selection from history) to base64 if available
-        var base64Image: String?
         if let image = displayedImage {
-            if let imageData = image.jpegData(compressionQuality: 0.8) {
-                base64Image = imageData.base64EncodedString()
-            }
-        }
-        
-        Task {
-            do {
-                // Try using the real API first
-                // No aspect ratio needed
-                
-                print("===== STARTING API REQUEST =====")
-                print("Text prompt: \(text)")
-                print("Has input image: \(base64Image != nil)")
-                print("Device model: \(UIDevice.current.model)")
-                print("iOS version: \(UIDevice.current.systemVersion)")
-                
-                let serviceName = useHighQuality ? "Flux Kontext Max" : "Flux Kontext Pro"
-                print("Using service: \(serviceName)")
-                
-                // Debug info about which service is being used
-                if let service = activeSecureService as? SecureFluxProService {
-                    print("Service instance is SecureFluxProService")
-                    print("Service info: \(service.getServiceInfo())")
-                } else if let service = activeSecureService as? SecureFluxMaxService {
-                    print("Service instance is SecureFluxMaxService")
-                    print("Service info: \(service.getServiceInfo())")
-                } else {
-                    print("Unknown service type: \(type(of: activeSecureService))")
-                }
-                
-                let apiResult = try await activeSecureService.generateImage(
-                    prompt: text,
-                    inputImage: base64Image,
-                    seed: nil as Int?,
-                    aspectRatio: nil
-                )
-                
-                print("API request successful, polling URL: \(apiResult.polling_url)")
-                
-                // Poll for result
-                let finalImage = try await activeSecureService.pollForResult(pollingURL: apiResult.polling_url)
-                
-                print("Successfully retrieved image from API")
-                
-                // Deduct credits if user doesn't have an active subscription
-                if storeKitService.subscriptionStatus != .subscribed {
-                    await MainActor.run {
-                        storeKitService.credits -= requiredCredits
-                        print("💰 Deducted \(requiredCredits) credits. Remaining: \(storeKitService.credits)")
-                    }
-                }
-                
-                await MainActor.run {
-                    // Create cross-fade between old and new image while blurred
-                    let originalImage = self.generatedImage
-                    
-                    // Hide the loading indicator
-                    self.isLoading = false
-                    
-                    // Animate cross-fade under blur over 1.5 seconds
-                    withAnimation(.easeInOut(duration: 1.5)) {
-                        self.generatedImage = finalImage
-                    }
-                    
-                    // After cross-fade completes, start reducing blur
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        // Now gradually reduce blur to reveal the image
-                        withAnimation(.easeOut(duration: 3.0)) {
-                            self.blurRadius = 0
-                        }
-                    }
-                    
-                    // When blur animation completes, update the displayed image and finish transition
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
-                        self.displayedImage = finalImage
-                        
-                        // Fade out the transition layer
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            self.transitionOpacity = 0
-                        }
-                        
-                        // After fade out, deactivate transition
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            self.transitionActive = false
-                            // No distortion animation to stop
-                            
-                            // Add to history right after the current selected image
-                            if self.currentHistoryIndex >= 0 {
-                                // Insert right after the current index
-                                let insertIndex = self.currentHistoryIndex + 1
-                                
-                                // Insert the new image at the right position (without removing later images)
-                                self.imageHistory.insert(finalImage, at: insertIndex)
-                                self.currentHistoryIndex = insertIndex
-                            } else if !self.imageHistory.isEmpty {
-                                // If somehow no index is selected but history exists, append to end
-                                self.imageHistory.append(finalImage)
-                                self.currentHistoryIndex = self.imageHistory.count - 1
-                            } else {
-                                // First image in history
-                                self.imageHistory = [finalImage]
-                                self.currentHistoryIndex = 0
-                            }
-                        }
-                    }
-                }
-            } catch let fluxError as SecureFluxError {
-                // If API fails with a specific flux error, show error popup
-                print("⚠️ FLUX API ERROR: \(fluxError)")
-                
-                await MainActor.run {
-                    self.isLoading = false
-                    self.transitionActive = false
-                    
-                    // Set error message based on error type
-                    switch fluxError {
-                    case .invalidURL:
-                        self.errorMessage = "Invalid API endpoint. Please check your configuration."
-                    case .invalidResponse:
-                        self.errorMessage = "Invalid response from server. Please try again."
-                    case .encodingError:
-                        self.errorMessage = "Failed to encode request. Please try again."
-                    case .decodingError:
-                        self.errorMessage = "Failed to decode server response. Please try again."
-                    case .networkError(let error):
-                        self.errorMessage = "Network error: \(error.localizedDescription)"
-                    case .apiError(let message):
-                        self.errorMessage = "API error: \(message)"
-                    case .imageDecodingError:
-                        self.errorMessage = "Failed to decode generated image. Please try again."
-                    case .pollingTimeout:
-                        self.errorMessage = "Request timed out. Please modify your prompt or image, or try again later."
-                    case .unauthorized:
-                        self.errorMessage = "Unauthorized access. Please check your API token."
-                    case .rateLimited:
-                        self.errorMessage = "Too many requests. Please wait and try again."
-                    case .attestationRequired:
-                        self.errorMessage = "Device authentication required. Please restart the app."
-                    case .attestationFailed:
-                        self.errorMessage = "Device authentication failed. Please restart the app."
-                    }
-                    
-                    self.showErrorPopup = true
-                }
-            } catch {
-                // If API fails with a generic error, show error popup
-                print("⚠️ GENERAL API ERROR: \(error)")
-                
-                await MainActor.run {
-                    self.isLoading = false
-                    self.transitionActive = false
-                    
-                    self.errorMessage = "Image generation failed: \(error.localizedDescription)"
-                    self.showErrorPopup = true
-                }
-            }
+            displayedImage = image
+        } else {
+            errorMessage = "Image generation is unavailable."
+            showErrorPopup = true
         }
     }
-    
+
     // Save photo functionality removed
     
     // Helper function to scale and preserve aspect ratio
